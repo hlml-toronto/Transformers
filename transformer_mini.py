@@ -3,26 +3,70 @@ import numpy as np
 import torch
 from torch.autograd import Variable
 
-from classes import make_model, subsequent_mask, NoamOpt, LabelSmoothing, PositionalEncoding, SimpleLossCompute, \
-    run_epoch, Batch
+from classes import make_model, subsequent_mask, NoamOpt, LabelSmoothing, PositionalEncoding, run_epoch, Batch, \
+    greedy_decode
 
 
-def data_gen(V, batch, nbatches):
+def build_random_src_tgt(V, batch):
+    data = torch.from_numpy(np.random.randint(1, V, size=(batch, 10)))
+    data[:, 0] = 1  # why set first column to 1?
+    src = Variable(data, requires_grad=False)
+    tgt = Variable(data, requires_grad=False)
+
+    # possibly Windows specific bugfix
+    src = src.type(torch.LongTensor)
+    tgt = tgt.type(torch.LongTensor)
+    return src, tgt
+
+
+def data_gen(V, batch, nbatches, listmode=False):
     "Generate random data for a src-tgt copy task."
+    """
+    V: data will be uniform random int from 1 to V, inclusive
+    batch: size of a block of random data vectors (arrays batch x 10) 
+    nbatches: number of batches
+    """
     for i in range(nbatches):
-        data = torch.from_numpy(np.random.randint(1, V, size=(batch, 10)))
-        data[:, 0] = 1 # why set first column to 1?
-        src = Variable(data, requires_grad=False)
-        tgt = Variable(data, requires_grad=False)
+        src, tgt = build_random_src_tgt(V, batch)
         ## src and tgt are tensors with shape [batch, 10]
         ## in the copy task, batch = 30.
-        yield Batch(src, tgt, 0)                                 # yield ????
+        yield Batch(src, tgt, 0)
+
+
+def data_gen_list(V, batch, nbatches):
+    data_batches = [0] * nbatches
+    for i in range(nbatches):
+        src, tgt = build_random_src_tgt(V, batch)
+        data_batches[i] = Batch(src, tgt, 0)
+    return data_batches
+
+
+class SimpleLossCompute:
+    "A simple loss compute and train function."
+
+    def __init__(self, generator, criterion, opt=None):
+        self.generator = generator
+        self.criterion = criterion
+        self.opt = opt
+
+    def __call__(self, x, y, norm):
+        x = self.generator(x)
+        loss = self.criterion(x.contiguous().view(-1, x.size(-1)),
+                              y.contiguous().view(-1)) / norm
+        loss.backward()
+        if self.opt is not None:
+            self.opt.step()
+            self.opt.optimizer.zero_grad()
+        return loss.data * norm
 
 
 if __name__ == '__main__':
 
     misc_plots = False
     greedy_decoding_replicated = True
+    # ERROR 1: (maybe windows/cpu only)
+    # RuntimeError: Expected tensor for argument #1 'indices' to have scalar type Long; but got torch.IntTensor instead (while checking arguments for embedding)
+
 
     if misc_plots:
         plt.figure(figsize=(5,5))
@@ -72,51 +116,39 @@ if __name__ == '__main__':
 
     if greedy_decoding_replicated:
 
-        # greedy decoding
-        # Testing on Windows & CPU only
-        # ISSUE TO FIX #1:
-        # run_epoch() call -> RuntimeError: Expected tensor for argument #1 'indices' to have scalar type Long; but got torch.IntTensor instead (while checking arguments for embedding)
-
         # Train the simple copy task.
+        epochs = 15
         V = 11  # input symbols are integers from 1 to 11 inclusive
         criterion = LabelSmoothing(size=V, padding_idx=0, smoothing=0.0)
         model = make_model(V, V, N=2)  # model is EncoderDecoder object
         model_opt = NoamOpt(model.src_embed[0].d_model, 1, 400,
                             torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
 
-        for epoch in range(10):
+        # Generate random data
+        data_batches = data_gen_list(V, 30, 5)  # old call: data_gen(V, 30, 20) (makes generator instead of list)
+        print('data_batches properties')
+        print(type(data_batches), 'lengths', len(data_batches), type(data_batches[0]), '\n')
+
+        # Train the model
+        loss_curve = [0] * epochs
+        for epoch in range(epochs):  # def 10
             ## calls nn.Module.train() which sets mode to train
             model.train()
-            run_epoch(data_gen(V, 30, 20), model,
-                      SimpleLossCompute(model.generator, criterion, model_opt))
+            epoch_loss = run_epoch(data_batches, model,
+                                   SimpleLossCompute(model.generator, criterion, model_opt))
+            print('Epoch %d loss:' % epoch, epoch_loss)
+            loss_curve[epoch] = epoch_loss
             ## sets mode to testing (i.e. train=False).
             ## Layers like dropout behave differently depending on if mode is train or testing.
             model.eval()
-            print(run_epoch(data_gen(V, 30, 5), model,
-                            SimpleLossCompute(model.generator, criterion, None)))
 
-        # Train the simple copy task.
-        """
-        V = 11  # input symbols are integers from 1 to 11 inclusive
-        criterion = LabelSmoothing(size=V, padding_idx=0, smoothing=0.0)
-        model = make_model(V, V, N=2)  # model is EncoderDecoder object
-        model_opt = NoamOpt(model.src_embed[0].d_model, 1, 400,
-                            torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
-
-        print()
+        """print()
         tester1 = model.src_embed(src)
         print(type(tester1))
         tester2 = model.encoder(model.src_embed(src), src_mask)
         print(type(tester2))
         tester3 = model.encode(src, src_mask)
-        print(type(tester3))
-
-        data_batches = data_gen_alt(V, 30, 20)
-        for i, batch in enumerate(data_batches):
-            print('%d...' % i)
-            outTest = model.forward(batch.src, batch.trg, batch.src_mask, batch.trg_mask)
-            print(type(outTest))
-        """
+        print(type(tester3))"""
 
         model.to(torch.device('cpu'))
         model.eval()
