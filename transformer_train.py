@@ -22,8 +22,7 @@ class MyIterator(data.Iterator):
 
         else:
             self.batches = []
-            for b in data.batch(self.data(), self.batch_size,
-                                self.batch_size_fn):
+            for b in data.batch(self.data(), self.batch_size, self.batch_size_fn):
                 self.batches.append(sorted(b, key=self.sort_key))
 
 
@@ -40,21 +39,17 @@ class MultiGPULossCompute:
     def __init__(self, generator, criterion, devices, opt=None, chunk_size=5):
         # Send out to different gpus.
         self.generator = generator
-        self.criterion = nn.parallel.replicate(criterion,
-                                               devices=devices)
+        self.criterion = nn.parallel.replicate(criterion, devices=devices)
         self.opt = opt
         self.devices = devices
         self.chunk_size = chunk_size
 
     def __call__(self, out, targets, normalize):
         total = 0.0
-        generator = nn.parallel.replicate(self.generator,
-                                          devices=self.devices)
-        out_scatter = nn.parallel.scatter(out,
-                                          target_gpus=self.devices)
+        generator = nn.parallel.replicate(self.generator, devices=self.devices)
+        out_scatter = nn.parallel.scatter(out, target_gpus=self.devices)
         out_grad = [[] for _ in out_scatter]
-        targets = nn.parallel.scatter(targets,
-                                      target_gpus=self.devices)
+        targets = nn.parallel.scatter(targets, target_gpus=self.devices)
 
         # Divide generating into chunks.
         chunk_size = self.chunk_size
@@ -74,13 +69,9 @@ class MultiGPULossCompute:
             # print("loss object in multiGPU", type(loss), loss)
 
             # Sum and normalize loss
-            l = nn.parallel.gather(loss,
-                                   target_device=self.devices[0])
-            # print("l object in multiGPU", type(l), l)
-            # print("l.sum() object in multiGPU", type(l.sum()), l.sum())
-            # print("l.data object in multiGPU", type(l.data), l.data)
+            l = nn.parallel.gather(loss, target_device=self.devices[0])
             l = l.sum() / normalize  # switched numerator from l.sum()[0]
-            total += l.data.item()  # switched from l.data[0]
+            total += l.data.item()   # switched from l.data[0]
 
             # Backprop loss to output of transformer
             if self.opt is not None:
@@ -92,8 +83,7 @@ class MultiGPULossCompute:
         if self.opt is not None:
             out_grad = [Variable(torch.cat(og, dim=1)) for og in out_grad]
             o1 = out
-            o2 = nn.parallel.gather(out_grad,
-                                    target_device=self.devices[0])
+            o2 = nn.parallel.gather(out_grad, target_device=self.devices[0])
             o1.backward(gradient=o2)
             self.opt.step()
             self.opt.optimizer.zero_grad()
@@ -137,14 +127,14 @@ if __name__ == '__main__':
     EOS_WORD = '</s>'
     BLANK_WORD = "<blank>"
     SRC = data.Field(tokenize=tokenize_de, pad_token=BLANK_WORD)
-    TGT = data.Field(tokenize=tokenize_en, init_token = BOS_WORD,
-                     eos_token = EOS_WORD, pad_token=BLANK_WORD)
+    TGT = data.Field(tokenize=tokenize_en, init_token=BOS_WORD,
+                     eos_token=EOS_WORD, pad_token=BLANK_WORD)
 
     MAX_LEN = 100
     train, val, test = datasets.IWSLT.splits(
         exts=('.de', '.en'), fields=(SRC, TGT),
         filter_pred=lambda x: len(vars(x)['src']) <= MAX_LEN and
-            len(vars(x)['trg']) <= MAX_LEN)
+                              len(vars(x)['trg']) <= MAX_LEN)
     MIN_FREQ = 2
     SRC.build_vocab(train.src, min_freq=MIN_FREQ)
     TGT.build_vocab(train.trg, min_freq=MIN_FREQ)
