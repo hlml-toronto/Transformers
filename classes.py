@@ -61,6 +61,7 @@ class Encoder(nn.Module):
             x = layer(x, mask)
         return self.norm(x)
 
+
 class LayerNorm(nn.Module):
     "Construct a layernorm module (See citation for details)."
 
