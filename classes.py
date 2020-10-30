@@ -298,6 +298,7 @@ def run_epoch(data_iter, model, loss_compute):
     tokens = 0
     ## data_iter is generator of Batch objects
     for i, batch in enumerate(data_iter):
+        #print(len(list(data_iter)))  # <- this broke the loop by modifying data_iter possibly (got ~6051, then 40)
         ## this calls the forward() method of the EncoderDecoder class
         print("In run_epoch(...) A, batch #", i)
         out = model.forward(batch.src, batch.trg, batch.src_mask, batch.trg_mask)
@@ -383,25 +384,6 @@ class LabelSmoothing(nn.Module):
             true_dist.index_fill_(0, mask.squeeze(), 0.0)
         self.true_dist = true_dist
         return self.criterion(x, Variable(true_dist, requires_grad=False))
-
-
-class SimpleLossCompute:
-    "A simple loss compute and train function."
-
-    def __init__(self, generator, criterion, opt=None):
-        self.generator = generator
-        self.criterion = criterion
-        self.opt = opt
-
-    def __call__(self, x, y, norm):
-        x = self.generator(x)
-        loss = self.criterion(x.contiguous().view(-1, x.size(-1)),
-                              y.contiguous().view(-1)) / norm
-        loss.backward()
-        if self.opt is not None:
-            self.opt.step()
-            self.opt.optimizer.zero_grad()
-        return loss.data * norm
 
 
 def greedy_decode(model, src, src_mask, max_len, start_symbol):
