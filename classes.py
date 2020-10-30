@@ -300,9 +300,7 @@ def run_epoch(data_iter, model, loss_compute):
     for i, batch in enumerate(data_iter):
         #print(len(list(data_iter)))  # <- this broke the loop by modifying data_iter possibly (got ~6051, then 40)
         ## this calls the forward() method of the EncoderDecoder class
-        print("In run_epoch(...) A, batch #", i)
         out = model.forward(batch.src, batch.trg, batch.src_mask, batch.trg_mask)
-        print("In run_epoch(...) B, batch #", i)
         loss = loss_compute(out, batch.trg_y, batch.ntokens)
         total_loss += loss
         total_tokens += float(batch.ntokens)
