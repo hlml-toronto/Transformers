@@ -194,6 +194,7 @@ class MultiHeadedAttention(nn.Module):
             .view(nbatches, -1, self.h * self.d_k)
         return self.linears[-1](x)
 
+
 class PositionwiseFeedForward(nn.Module):
     "Implements FFN equation."
     def __init__(self, d_model, d_ff, dropout=0.1):
@@ -357,11 +358,6 @@ class NoamOpt:
                 min(step ** (-0.5), step * self.warmup ** (-1.5)))
 
 
-def get_std_opt(model):
-    return NoamOpt(model.src_embed[0].d_model, 2, 4000,
-                   torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
-
-
 class LabelSmoothing(nn.Module):
     """
     Implement label smoothing.
@@ -389,18 +385,6 @@ class LabelSmoothing(nn.Module):
         return self.criterion(x, Variable(true_dist, requires_grad=False))
 
 
-def data_gen(V, batch, nbatches):
-    "Generate random data for a src-tgt copy task."
-    for i in range(nbatches):
-        data = torch.from_numpy(np.random.randint(1, V, size=(batch, 10)))
-        data[:, 0] = 1 # why set first column to 1?
-        src = Variable(data, requires_grad=False)
-        tgt = Variable(data, requires_grad=False)
-        ## src and tgt are tensors with shape [batch, 10]
-        ## in the copy task, batch = 30.
-        yield Batch(src, tgt, 0)                                 # yield ????
-
-
 class SimpleLossCompute:
     "A simple loss compute and train function."
 
@@ -418,3 +402,19 @@ class SimpleLossCompute:
             self.opt.step()
             self.opt.optimizer.zero_grad()
         return loss.data * norm
+
+
+def greedy_decode(model, src, src_mask, max_len, start_symbol):
+    memory = model.encode(src, src_mask)
+    ys = torch.ones(1, 1).fill_(start_symbol).type_as(src.data)
+    for i in range(max_len - 1):
+        out = model.decode(memory, src_mask,
+                           Variable(ys),
+                           Variable(subsequent_mask(ys.size(1))
+                                    .type_as(src.data)))
+        prob = model.generator(out[:, -1])
+        _, next_word = torch.max(prob, dim=1)
+        next_word = next_word.data[0]
+        ys = torch.cat([ys,
+                        torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1)
+    return ys

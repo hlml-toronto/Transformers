@@ -4,7 +4,20 @@ import torch
 from torch.autograd import Variable
 
 from classes import make_model, subsequent_mask, NoamOpt, LabelSmoothing, PositionalEncoding, SimpleLossCompute, \
-    run_epoch, data_gen
+    run_epoch, Batch
+
+
+def data_gen(V, batch, nbatches):
+    "Generate random data for a src-tgt copy task."
+    for i in range(nbatches):
+        data = torch.from_numpy(np.random.randint(1, V, size=(batch, 10)))
+        data[:, 0] = 1 # why set first column to 1?
+        src = Variable(data, requires_grad=False)
+        tgt = Variable(data, requires_grad=False)
+        ## src and tgt are tensors with shape [batch, 10]
+        ## in the copy task, batch = 30.
+        yield Batch(src, tgt, 0)                                 # yield ????
+
 
 if __name__ == '__main__':
 
@@ -104,23 +117,6 @@ if __name__ == '__main__':
             outTest = model.forward(batch.src, batch.trg, batch.src_mask, batch.trg_mask)
             print(type(outTest))
         """
-
-
-        def greedy_decode(model, src, src_mask, max_len, start_symbol):
-            memory = model.encode(src, src_mask)
-            ys = torch.ones(1, 1).fill_(start_symbol).type_as(src.data)
-            for i in range(max_len - 1):
-                out = model.decode(memory, src_mask,
-                                   Variable(ys),
-                                   Variable(subsequent_mask(ys.size(1))
-                                            .type_as(src.data)))
-                prob = model.generator(out[:, -1])
-                _, next_word = torch.max(prob, dim=1)
-                next_word = next_word.data[0]
-                ys = torch.cat([ys,
-                                torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1)
-            return ys
-
 
         model.to(torch.device('cpu'))
         model.eval()
