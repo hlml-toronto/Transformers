@@ -14,11 +14,11 @@ class EncoderDecoder(nn.Module):
 
     def __init__(self, encoder, decoder, src_embed, tgt_embed, generator):
         super(EncoderDecoder, self).__init__()
-        self.encoder = encoder
-        self.decoder = decoder
-        self.src_embed = src_embed
-        self.tgt_embed = tgt_embed
-        self.generator = generator
+        self.encoder = encoder # Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N)
+        self.decoder = decoder # Decoder(DecoderLayer(d_model, c(attn), c(attn), c(ff), dropout), N)
+        self.src_embed = src_embed # nn.Sequential(Embeddings(d_model, src_vocab), c(position))
+        self.tgt_embed = tgt_embed # nn.Sequential(Embeddings(d_model, tgt_vocab), c(position))
+        self.generator = generator # Generator(d_model, tgt_vocab)
 
     def forward(self, src, tgt, src_mask, tgt_mask):
         "Take in and process masked src and target sequences."
@@ -26,6 +26,7 @@ class EncoderDecoder(nn.Module):
                            tgt, tgt_mask)
 
     def encode(self, src, src_mask):
+        ## self.src_embed calls Embeddings.forward(src) (output then channelled to PositionalEncoding.forward())
         return self.encoder(self.src_embed(src), src_mask)
 
     def decode(self, memory, src_mask, tgt, tgt_mask):
@@ -57,9 +58,9 @@ class Encoder(nn.Module):
 
     def forward(self, x, mask):
         "Pass the input (and mask) through each layer in turn."
-        for layer in self.layers:
-            x = layer(x, mask)
-        return self.norm(x)
+        for layer in self.layers: # layer is EncoderLayer(d_model, c(attn), c(ff), dropout)
+            x = layer(x, mask) # calls EncoderLayer.forward(src*, src_mask) *with embeddings and positional encoding
+        return self.norm(x) # calls LayerNorm.forward()
 
 
 class LayerNorm(nn.Module):
@@ -210,10 +211,14 @@ class PositionwiseFeedForward(nn.Module):
 class Embeddings(nn.Module):
     def __init__(self, d_model, vocab):
         super(Embeddings, self).__init__()
+        ## vocab is vocabulary size (=11)
+        ## d_model is dimensionality of each embedding vector (=512)
         self.lut = nn.Embedding(vocab, d_model)
         self.d_model = d_model
 
-    def forward(self, x):
+    def forward(self, x): # x needs to be a LongTensor
+        ## x.shape = [30, 10] or [30, 9]
+        ## self.lut(x).shape = [30, 10, 512] or [30, 9, 512]
         return self.lut(x) * math.sqrt(self.d_model)
 
 
@@ -225,19 +230,27 @@ class PositionalEncoding(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
 
         # Compute the positional encodings once in log space.
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len).unsqueeze(1)
+        pe = torch.zeros(max_len, d_model) # size: [5000, 512]
+        position = torch.arange(0, max_len).unsqueeze(1) # size: [5000, 1]
+        ## not sure why this is implemented "in log space". Otherwise matches paper
         div_term = torch.exp(torch.arange(0, d_model, 2) *
-                             -(math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)
+                             -(math.log(10000.0) / d_model)) # exp{2i*-ln(10000)/512}
+        pe[:, 0::2] = torch.sin(position * div_term) # even columns set to sine
+        pe[:, 1::2] = torch.cos(position * div_term) # odd columns set to cosine
+        pe = pe.unsqueeze(0) # shape: [1, 5000, 512]
+
+        ## registers pe as a buffer that should not to be considered a model parameter.
+        ## Buffers, by default, are persistent and will be saved alongside parameters.
+        ## Often used for running averages
         self.register_buffer('pe', pe)
 
-    def forward(self, x):
+    def forward(self, x): ## takes normalized, embedded x
+
+        # x.shape is [30, 10, 512] or [30, 9, 512]
+        # pe added is [1, 10, 512] or [1, 9, 512]
         x = x + Variable(self.pe[:, :x.size(1)],
                          requires_grad=False)
-        return self.dropout(x)
+        return self.dropout(x) # applies dropout (zeros some elements of x with prob=dropout)
 
 
 def make_model(src_vocab, tgt_vocab, N=6,
