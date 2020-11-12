@@ -104,7 +104,17 @@ class EncoderLayer(nn.Module):
 
     def forward(self, x, mask):
         "Follow Figure 1 (left) for connections."
+
+        ## SublayerConnection.forward() called:
+        ## x is passed through LayerNorm, then
+        ## MultiHeadedAttention.forward() called, with query=x, key=x, value=x
+        ## then dropout applied (dropout was applied in attention already, does it need to be applied again?)
+        ## why is x added to the results of all that?
         x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, mask))
+
+        ## SublayerConnection.forward() called again:
+        ## x is passed through LayerNorm, then 
+        ## PositionwiseFeedForward.forward() called
         return self.sublayer[1](x, self.feed_forward)
 
 
@@ -152,11 +162,12 @@ def subsequent_mask(size):
 def attention(query, key, value, mask=None, dropout=None):
     "Compute 'Scaled Dot Product Attention'"
     d_k = query.size(-1)
+    ## (Encode:) query, key are both [30, 8, 10, 64], scores is [30, 8, 10, 10]
     scores = torch.matmul(query, key.transpose(-2, -1)) \
              / math.sqrt(d_k)
     if mask is not None:
-        scores = scores.masked_fill(mask == 0, -1e9)
-    p_attn = F.softmax(scores, dim = -1)
+        scores = scores.masked_fill(mask == 0, -1e9) # sets masked scores to (almost) -inf
+    p_attn = F.softmax(scores, dim = -1) # computes softmax along last dimension
     if dropout is not None:
         p_attn = dropout(p_attn)
     return torch.matmul(p_attn, value), p_attn
@@ -170,7 +181,7 @@ class MultiHeadedAttention(nn.Module):
         # We assume d_v always equals d_k
         self.d_k = d_model // h
         self.h = h
-        self.linears = clones(nn.Linear(d_model, d_model), 4)
+        self.linears = clones(nn.Linear(d_model, d_model), 4) # input size = 512, output size = 512
         self.attn = None
         self.dropout = nn.Dropout(p=dropout)
 
@@ -178,22 +189,31 @@ class MultiHeadedAttention(nn.Module):
         "Implements Figure 2"
         if mask is not None:
             # Same mask applied to all h heads.
+            # For Encoder layers, mask is shape [30, 1, 1, 10]
             mask = mask.unsqueeze(1)
         nbatches = query.size(0)
 
         # 1) Do all the linear projections in batch from d_model => h x d_k
+
+        ## applies linear transformation to query, key, values
+        ## then reshapes to [30, -1, 8, 512//8], and transposes to [30, 8, -1, 512//8] (-1 is 9 or 10)
+        ## the reshape, then transpose conserves the ordering of "words" within the "sentence"
+        ## attn is calculated independently for each Nth 64 elements of the embeddings of a sentence
         query, key, value = \
             [l(x).view(nbatches, -1, self.h, self.d_k).transpose(1, 2)
-             for l, x in zip(self.linears, (query, key, value))]
+             for l, x in zip(self.linears, (query, key, value))] # 1st arg to zip are 4 nn.Linears, this only uses the first 3
 
         # 2) Apply attention on all the projected vectors in batch.
         x, self.attn = attention(query, key, value, mask=mask,
                                  dropout=self.dropout)
 
         # 3) "Concat" using a view and apply a final linear.
+
+        ## contiguous() copies memory
+        ## stiches weighted values back from [30, 8, 10, 64] to [30, 10, 512]
         x = x.transpose(1, 2).contiguous() \
             .view(nbatches, -1, self.h * self.d_k)
-        return self.linears[-1](x)
+        return self.linears[-1](x) # the last nn.Linears is used here, I guess.
 
 
 class PositionwiseFeedForward(nn.Module):
@@ -280,12 +300,12 @@ class Batch:
     """Object for holding a batch of data with mask during training."""
 
     def __init__(self, src, trg=None, pad=0):
-        self.src = src
-        self.src_mask = (src != pad).unsqueeze(-2)
+        self.src = src # shape: [30, 10]
+        self.src_mask = (src != pad).unsqueeze(-2) # masks padding, shape: [30, 1, 10]
 
         if trg is not None:
-            self.trg = trg[:, :-1]  # why cut out last column?
-            self.trg_y = trg[:, 1:]
+            self.trg = trg[:, :-1]  # cuts out last column of trg (why?)
+            self.trg_y = trg[:, 1:] # cuts out first colum of trg (all 1s)
             self.trg_mask = \
                 self.make_std_mask(self.trg, pad)
             self.ntokens = (self.trg_y != pad).data.sum()
