@@ -416,6 +416,20 @@ class LabelSmoothing(nn.Module):
         self.true_dist = true_dist
         return self.criterion(x, Variable(true_dist, requires_grad=False))
 
+def data_gen(V, batch, nbatches):
+    # "Generate random data for a src-tgt copy task."
+    # generates nbatches of Batch objects
+    for i in range(nbatches):
+        data = torch.from_numpy(np.random.randint(1, V, size=(batch, 10)))
+        data[:, 0] = 1 # why is first column set to 1?
+        # src = Variable(data, requires_grad=False)
+        # tgt = Variable(data, requires_grad=False)
+        src = data 
+        tgt = data
+        ## src and tgt are tensors with shape [batch, 10]
+        ## in the copy task, batch = 30. 
+        yield Batch(src, tgt, 0)
+
 
 def greedy_decode(model, src, src_mask, max_len, start_symbol):
     memory = model.encode(src, src_mask)
@@ -431,3 +445,4 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
         ys = torch.cat([ys,
                         torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1)
     return ys
+
