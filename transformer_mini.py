@@ -3,8 +3,16 @@ import numpy as np
 import torch
 from torch.autograd import Variable
 
-from classes import make_model, subsequent_mask, NoamOpt, LabelSmoothing, PositionalEncoding, run_epoch, Batch, \
-    greedy_decode
+from classes import subsequent_mask, PositionalEncoding
+
+from util.greedy_decode import greedy_decode
+from util.label_smoothing import LabelSmoothing
+from util.noam_opt import NoamOpt
+from util.run_epoch import run_epoch
+from model.batch import Batch, batch_size_fn, rebatch, MyIterator
+from device.CPU_loss import CPULossCompute
+from device.multi_GPU_loss import MultiGPULossCompute
+from model.transformer import make_model
 
 
 def build_random_src_tgt(V, batch):
@@ -23,7 +31,7 @@ def data_gen(V, batch, nbatches, listmode=False):
     "Generate random data for a src-tgt copy task."
     """
     V: data will be uniform random int from 1 to V, inclusive
-    batch: size of a block of random data vectors (arrays batch x 10) 
+    batch: size of a block of random data vectors (arrays batch x 10)
     nbatches: number of batches
     """
     for i in range(nbatches):
