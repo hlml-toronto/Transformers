@@ -1,7 +1,9 @@
+import math
 import torch
 import copy
 from torch import nn
 import torch.nn.functional as F
+
 
 class Generator(nn.Module):
     "Define standard linear + softmax generation step."
@@ -11,6 +13,7 @@ class Generator(nn.Module):
 
     def forward(self, x):
         return F.log_softmax(self.proj(x), dim=-1)
+
 
 class LayerNorm(nn.Module):
     "Construct a layernorm module (See citation for details)."
@@ -26,6 +29,7 @@ class LayerNorm(nn.Module):
         std = x.std(-1, keepdim=True)
         return self.a_2 * (x - mean) / (std + self.eps) + self.b_2
 
+
 class SublayerConnection(nn.Module):
     """
     A residual connection followed by a layer norm.
@@ -39,6 +43,7 @@ class SublayerConnection(nn.Module):
     def forward(self, x, sublayer):
         "Apply residual connection to any sublayer with the same size."
         return x + self.dropout(sublayer(self.norm(x)))
+
 
 class EncoderLayer(nn.Module):
     "Encoder is made up of self-attn and feed forward (defined below)"
@@ -64,6 +69,7 @@ class EncoderLayer(nn.Module):
         ## PositionwiseFeedForward.forward() called
         return self.sublayer[1](x, self.feed_forward)
 
+
 class DecoderLayer(nn.Module):
     "Decoder is made of self-attn, src-attn, and feed forward (defined below)"
 
@@ -82,6 +88,7 @@ class DecoderLayer(nn.Module):
         x = self.sublayer[1](x, lambda x: self.src_attn(x, m, m, src_mask))
         return self.sublayer[2](x, self.feed_forward)
 
+
 class PositionwiseFeedForward(nn.Module):
     "Implements FFN equation."
     def __init__(self, d_model, d_ff, dropout=0.1):
@@ -92,6 +99,7 @@ class PositionwiseFeedForward(nn.Module):
 
     def forward(self, x):
         return self.w_2(self.dropout(F.relu(self.w_1(x))))
+
 
 class Embeddings(nn.Module):
     def __init__(self, d_model, vocab):
@@ -105,6 +113,7 @@ class Embeddings(nn.Module):
         ## x.shape = [30, 10] or [30, 9]
         ## self.lut(x).shape = [30, 10, 512] or [30, 9, 512]
         return self.lut(x) * math.sqrt(self.d_model)
+
 
 def clones(module, N):
     "Produce N identical layers."

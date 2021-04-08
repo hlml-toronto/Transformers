@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
+
 class LabelSmoothing(nn.Module):
     """
     Implement label smoothing.
@@ -20,7 +21,8 @@ class LabelSmoothing(nn.Module):
         assert x.size(1) == self.size
         true_dist = x.data.clone()
         true_dist.fill_(self.smoothing / (self.size - 2))
-        true_dist.scatter_(1, target.data.unsqueeze(1), self.confidence)
+        indices = target.data.unsqueeze(1).type(torch.int64)
+        true_dist.scatter_(1, indices, self.confidence)
         true_dist[:, self.padding_idx] = 0
         mask = torch.nonzero(target.data == self.padding_idx)
         if mask.dim() > 0 and mask.size(-1) > 0:

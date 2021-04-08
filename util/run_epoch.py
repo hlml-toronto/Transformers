@@ -1,3 +1,5 @@
+import time
+
 def run_epoch(data_iter, model, loss_compute):
     "Standard Training and Logging Function"
     start = time.time()

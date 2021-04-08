@@ -1,6 +1,10 @@
+import numpy as np
 import torch
 from torch.autograd import Variable
+from torchtext.legacy import data, datasets
+
 from model.position import subsequent_mask
+
 
 class Batch:
     """Object for holding a batch of data with mask during training."""
@@ -28,6 +32,7 @@ class Batch:
         # & takes intersection of two sets, final shape is [30, 9, 9]
         return tgt_mask
 
+
 class MyIterator(data.Iterator):
     def create_batches(self):
         if self.train:
@@ -46,6 +51,7 @@ class MyIterator(data.Iterator):
             for b in data.batch(self.data(), self.batch_size, self.batch_size_fn):
                 self.batches.append(sorted(b, key=self.sort_key))
 
+
 global max_src_in_batch, max_tgt_in_batch
 def batch_size_fn(new, count, sofar):
     "Keep augmenting batch and calculate total number of tokens + padding."
@@ -58,6 +64,7 @@ def batch_size_fn(new, count, sofar):
     src_elements = count * max_src_in_batch
     tgt_elements = count * max_tgt_in_batch
     return max(src_elements, tgt_elements)
+
 
 def data_gen(V, batch, nbatches):
     # "Generate random data for a src-tgt copy task."
@@ -72,6 +79,7 @@ def data_gen(V, batch, nbatches):
         ## src and tgt are tensors with shape [batch, 10]
         ## in the copy task, batch = 30.
         yield Batch(src, tgt, 0)
+
 
 def rebatch(pad_idx, batch):
     "Fix order in torchtext to match ours"

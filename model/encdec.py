@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from model.layers import LayerNorm, clones
 
+
 class Encoder(nn.Module):
     "Core encoder is a stack of N layers"
 
@@ -16,6 +17,7 @@ class Encoder(nn.Module):
             x = layer(x, mask) # calls EncoderLayer.forward(src*, src_mask) *with embeddings and positional encoding
         return self.norm(x) # calls LayerNorm.forward()
 
+
 class Decoder(nn.Module):
     "Generic N layer decoder with masking."
 
@@ -29,6 +31,7 @@ class Decoder(nn.Module):
         for layer in self.layers:
             x = layer(x, memory, src_mask, tgt_mask)
         return self.norm(x)
+
 
 class EncoderDecoder(nn.Module):
     """

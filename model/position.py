@@ -1,8 +1,11 @@
 import torch
 import numpy as np
+import math
+
 from torch import nn
 import torch.nn.functional as F
 from torch.autograd import Variable
+
 
 def subsequent_mask(size):
     "Mask out subsequent positions."

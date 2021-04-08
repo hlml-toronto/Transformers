@@ -3,8 +3,7 @@ import numpy as np
 import torch
 from torch.autograd import Variable
 
-from classes import subsequent_mask, PositionalEncoding
-
+from model.position import PositionalEncoding, subsequent_mask
 from util.greedy_decode import greedy_decode
 from util.label_smoothing import LabelSmoothing
 from util.noam_opt import NoamOpt
