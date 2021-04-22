@@ -18,7 +18,7 @@ if __name__ == '__main__':
 
     print('In spacy loop...')
     spacy_de = spacy.load('de')
-    spacy_en = spacy.load('en')F.
+    spacy_en = spacy.load('en')
 
     def tokenize_de(text):
         return [tok.text for tok in spacy_de.tokenizer(text)]
